@@ -41,6 +41,11 @@
       <version>2.3.0</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-mllib_2.11</artifactId>
+      <version>2.3.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.specs</groupId>
       <artifactId>specs</artifactId>
       <version>1.2.5</version>
