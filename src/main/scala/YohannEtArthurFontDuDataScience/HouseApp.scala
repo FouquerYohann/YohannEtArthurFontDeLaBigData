@@ -27,6 +27,21 @@ object HouseApp extends App {
     typeId
   }
 
+  def flagColumns(dataFrame: DataFrame): DataFrame = {
+    val flags = Seq(
+      "fireplaceflag",
+      "taxdelinquencyflag"
+    )
+    val cols = Seq(
+      "fireplacecnt",
+      "poolsizesum",
+      "taxdelinquencyyear",
+      "garagetotalsqft"
+    )
+    dataFrame.na.fill(false, flags)
+      .na.fill(0, cols)
+      .na.fill(1, Seq("unitcnt"))
+  }
 
   override def main(args: Array[String]): Unit = {
     val path: String = "data/"
