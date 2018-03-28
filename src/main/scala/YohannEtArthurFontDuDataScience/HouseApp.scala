@@ -17,10 +17,11 @@ object HouseApp extends App {
     val fl = random.nextFloat()
     var typeId = -1
     var i = 0
-    while(i < repartition.length-1 && fl < repartition(i)._2) {
+    while(i < repartition.length-1 && fl > repartition(i)._2) {
       i += 1
     }
     typeId = repartition(i)._1
+
     typeId
   }
 
@@ -70,37 +71,31 @@ object HouseApp extends App {
 
   def fillNaWeightedDistribution(df: DataFrame, sqlContext: SQLContext): sql.DataFrame = {
     import sqlContext.implicits._
-    df.columns.filter(n => n.contains("id") && !n.equals("parcelid")).foreach(name => {
-      val l = df.select(name).filter(!_.anyNull).count()
+
+    var dfU = df
+
+    dfU.columns.filter(n => n.contains("id") && !n.equals("parcelid")).foreach(name => {
+      val l = dfU.select(name).filter(!_.anyNull).count()
       println(s"name = ${name}")
       println(s"l = ${l}")
 
-      df.groupBy(name).count().show()
-      val repartition = df.groupBy(name).count().filter(!_.anyNull).map(r => (r.getInt(0), r.getLong(1) / l.toDouble))
+      dfU.groupBy(name).count().show()
+      val repartition = dfU.groupBy(name).count().filter(!_.anyNull).map(r => (r.getInt(0), r.getLong(1) / l.toDouble))
                    .collect().sortWith(_._2 < _._2)
 
       for (i <- 1 until repartition.length) {
         repartition(i) = (repartition(i)._1, repartition(i)._2 + repartition(i - 1)._2)
       }
 
-//      for (elem <- repartition) {
-//        println(s"elem = ${elem}")
-//      }
-//      val array = df.select(name).map(r => if(r.anyNull) fill(repartition) else r.get(0)).collect()
+      val frame = dfU.select(name).map(r => if(r.anyNull) fill(repartition) else r.getInt(0)).toDF().withColumn("UniqueID", monotonically_increasing_id)
+      dfU = dfU.withColumn("UniqueID",monotonically_increasing_id())
 
-
-      val frame = df.select(name).map(r => if(r.anyNull) fill(repartition) else r.getInt(0)).toDF()
-
-      val rows1 = df.rdd.zipWithIndex().map{ case (r: Row, id: Long) => Row.fromSeq(id +: r.toSeq)}
-
-      val dataframe1 = (rows1, StructType(StructField("id", LongType, false) +: df.schema.fields))
-
-
+      dfU = dfU.drop(name).join(frame,"UniqueID").drop("UniqueID")
 
       frame.describe().show()
 
     })
-    df
+    dfU
   }
 
   override def main(args: Array[String]): Unit = {
@@ -123,50 +118,19 @@ object HouseApp extends App {
     var props = loadData(path + fic, sqlContext)
     println(fic + " loaded")
 
-
-
-
-
-
-//    val list = props.columns.filter(n => n.contains("id") && !n.equals("parcelid")).foreach( n => {
-//
-//      val frame = props.groupBy(n).count()
-//      frame.show()
-//      for (elem <- frame.schema.fields) {
-//        println(s"elem = ${elem.name}")
-//        println(elem.dataType)
-//      }
-//
-//      println("\t"+n)
-//      val fields = props.select(n).schema.fields
-//      for (elem <- fields) {
-//        println(elem.dataType)
-//      }
-//    }
-//
-//    )
-
+    props = flagColumns(props)
 
     val size = props.count()
     println(size)
 
-    //props = dropMissing(props, size,sqlContext)
+    props = dropMissing(props,size,sqlContext)
 
     props = fillNaWeightedDistribution(props,sqlContext)
 
-    //    println()
-    //    println()
-    //
-
-    //
-
-
-
-
-
-    //
 
     props.describe().show()
 
+
+    props.coalesce(1).write.csv("data/cleaned/test.csv")
   }
 }
