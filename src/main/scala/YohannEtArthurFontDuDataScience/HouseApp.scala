@@ -87,7 +87,9 @@ object HouseApp extends App {
         repartition(i) = (repartition(i)._1, repartition(i)._2 + repartition(i - 1)._2)
       }
 
-      val frame = dfU.select(name).map(r => if(r.anyNull) fill(repartition) else r.getInt(0)).toDF().withColumn("UniqueID", monotonically_increasing_id)
+      val frame = dfU.select(name).map(r => if(r.anyNull) fill(repartition) else r.getInt(0)).toDF()
+          .withColumn("UniqueID", monotonically_increasing_id)
+          .withColumnRenamed("value",name)
       dfU = dfU.withColumn("UniqueID",monotonically_increasing_id())
 
       dfU = dfU.drop(name).join(frame,"UniqueID").drop("UniqueID")
