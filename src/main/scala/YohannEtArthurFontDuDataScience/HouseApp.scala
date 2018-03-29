@@ -6,6 +6,9 @@ import org.apache.spark.sql
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{LongType, Metadata, StructField, StructType}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.DecisionTreeClassifier
+import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorAssembler, VectorIndexer}
 
 import scala.collection.mutable
 
@@ -40,22 +43,23 @@ object HouseApp extends App {
       .na.fill(0, cols)
       .na.fill(1, Seq("unitcnt"))
   }
+
   def loadData(path: String, sqlContext: SQLContext): sql.DataFrame = {
     sqlContext.read
-    .option("header", "true")
-    .option("inferSchema", "true")
-    .csv(path)
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(path)
   }
 
   def dropMissing(df: DataFrame, size: Long, sqlContext: SQLContext): sql.DataFrame = {
     import sqlContext.implicits._
     val longs = df
-                .columns
-                .map(str => (str, df
-                                  .select(str)
-                                  .filter(row => row.isNullAt(0))
-                                  .count().toDouble / size.toDouble
-                )).sortWith(_._2 > _._2)
+      .columns
+      .map(str => (str, df
+        .select(str)
+        .filter(row => row.isNullAt(0))
+        .count().toDouble / size.toDouble
+      )).sortWith(_._2 > _._2)
     var i = 0
     val length = df.columns.length
     var tmp = List[String]()
@@ -100,6 +104,63 @@ object HouseApp extends App {
     dfU
   }
 
+  def decisionTreeFiller(df: DataFrame, sqlContext: SQLContext, col: String): sql.DataFrame = {
+    import sqlContext.implicits._
+    var cols = Array(
+      "bathroomcnt",
+      "fireplacecnt",
+      "bedroomcnt",
+      "garagecarcnt",
+      "poolsizesum",
+      "latitude",
+      "longitude",
+      "roomcnt",
+      "taxamount",
+      "yearbuilt"
+    )
+    import sqlContext.implicits._
+    cols = cols.filter(str => !str.equals(col))
+    var data = df.na.drop(cols)
+    data = df.na.drop(Array(col))
+    data.columns.filter(!cols.contains(_)).foreach(data.drop(_))
+
+
+    val labelIndexer = new StringIndexer()
+      .setInputCol(col)
+      .setOutputCol("indexedLabel")
+      .fit(data)
+    // Automatically identify categorical features, and index them.
+    val featureIndexer = new VectorIndexer()
+      .setInputCols(cols)
+      .setOutputCol("indexedFeatures")
+      .fit(data)
+
+    // Split the data into training and test sets (30% held out for testing).
+    val trainingData = data
+
+    // Train a DecisionTree model.
+    val dt = new DecisionTreeClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+
+    // Convert indexed labels back to original labels.
+    val labelConverter = new IndexToString()
+      .setInputCol("prediction")
+      .setOutputCol("predictedLabel")
+      .setLabels(labelIndexer.labels)
+
+    // Chain indexers and tree in a Pipeline.
+    val pipeline = new Pipeline()
+      .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
+
+    // Train model. This also runs the indexers.
+    val model = pipeline.fit(trainingData)
+
+    // Make predictions.
+    model.transform(data)
+
+  }
+
   override def main(args: Array[String]): Unit = {
     val path: String = "data/"
 
@@ -130,9 +191,12 @@ object HouseApp extends App {
     props = fillNaWeightedDistribution(props,sqlContext)
 
 
+
+    props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
+
+
+
     props.describe().show()
 
-
-    props.coalesce(1).write.csv("data/cleaned/test.csv")
   }
 }
