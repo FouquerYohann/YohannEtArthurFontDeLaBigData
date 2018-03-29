@@ -20,7 +20,7 @@ object HouseApp extends App {
     val fl = random.nextFloat()
     var typeId = -1
     var i = 0
-    while(i < repartition.length-1 && fl > repartition(i)._2) {
+    while (i < repartition.length - 1 && fl > repartition(i)._2) {
       i += 1
     }
     typeId = repartition(i)._1
@@ -40,34 +40,27 @@ object HouseApp extends App {
       "garagetotalsqft"
     )
     dataFrame.na.fill(false, flags)
-      .na.fill(0, cols)
-      .na.fill(1, Seq("unitcnt"))
+    .na.fill(0, cols)
+    .na.fill(1, Seq("unitcnt"))
   }
 
   def loadData(path: String, sqlContext: SQLContext): sql.DataFrame = {
     sqlContext.read
-      .option("header", "true")
-      .option("inferSchema", "true")
-      .csv(path)
+    .option("header", "true")
+    .option("inferSchema", "true")
+    .csv(path)
   }
 
   def dropMissing(df: DataFrame, size: Long, sqlContext: SQLContext): sql.DataFrame = {
     import sqlContext.implicits._
-    val longs = df
-      .columns
-      .map(str => (str, df
-        .select(str)
-        .filter(row => row.isNullAt(0))
-        .count().toDouble / size.toDouble
-      )).sortWith(_._2 > _._2)
-    var i = 0
-    val length = df.columns.length
+
+    val list = df.columns.map(name => (name, df.select(name).filter(col(name).isNull).count()/size.toDouble)).toList.sortWith(_._2 >_._2)
+
     var tmp = List[String]()
-    while (i < length) {
-      printf("%30s : %f    %s\n", longs(i)._1, longs(i)._2, if (longs(i)._2 > 0.60) "EXCLURE" else "")
-      if (longs(i)._2 > 0.60)
-        tmp = longs(i)._1 :: tmp
-      i += 1
+    for (i <- df.columns.indices) {
+      printf("%30s : %f    %s\n", list(i)._1, list(i)._2, if (list(i)._2 > 0.60) "EXCLURE" else "")
+      if (list(i)._2 > 0.60)
+        tmp = list(i)._1 :: tmp
     }
     df.drop(tmp: _*)
   }
@@ -85,18 +78,18 @@ object HouseApp extends App {
 
       dfU.groupBy(name).count().show()
       val repartition = dfU.groupBy(name).count().filter(!_.anyNull).map(r => (r.getInt(0), r.getLong(1) / l.toDouble))
-                   .collect().sortWith(_._2 < _._2)
+                        .collect().sortWith(_._2 < _._2)
 
       for (i <- 1 until repartition.length) {
         repartition(i) = (repartition(i)._1, repartition(i)._2 + repartition(i - 1)._2)
       }
 
-      val frame = dfU.select(name).map(r => if(r.anyNull) fill(repartition) else r.getInt(0)).toDF()
-          .withColumn("UniqueID", monotonically_increasing_id)
-          .withColumnRenamed("value",name)
-      dfU = dfU.withColumn("UniqueID",monotonically_increasing_id())
+      val frame = dfU.select(name).map(r => if (r.anyNull) fill(repartition) else r.getInt(0)).toDF()
+                  .withColumn("UniqueID", monotonically_increasing_id)
+                  .withColumnRenamed("value", name)
+      dfU = dfU.withColumn("UniqueID", monotonically_increasing_id())
 
-      dfU = dfU.drop(name).join(frame,"UniqueID").drop("UniqueID")
+      dfU = dfU.drop(name).join(frame, "UniqueID").drop("UniqueID")
 
       frame.describe().show()
 
@@ -104,61 +97,94 @@ object HouseApp extends App {
     dfU
   }
 
-  def decisionTreeFiller(df: DataFrame, sqlContext: SQLContext, col: String): sql.DataFrame = {
+  def decisionTreeFiller(df: DataFrame, sqlContext: SQLContext, colu: String): sql.DataFrame = {
     import sqlContext.implicits._
-    var cols = Array(
-      "bathroomcnt",
-      "fireplacecnt",
-      "bedroomcnt",
-      "garagecarcnt",
-      "poolsizesum",
-      "latitude",
-      "longitude",
-      "roomcnt",
-      "taxamount",
-      "yearbuilt"
-    )
+
+    df.describe().show()
+
+    val dfNull = df.filter(col(colu).isNull).toDF()
+    val dfNotNull = df.filter(!col(colu).isNull).toDF()
+
+/*
+
+
+
+
+
+    ("parcelid",
+    "bathroomcnt",
+    "bedroomcnt",
+    "buildingqualitytypeid",
+    "calculatedbathnbr",
+    "calculatedfinishedsquarefeet",
+    "finishedsquarefeet12",
+    "fips",
+    "fireplacecnt",
+    "fullbathcnt",
+    "garagetotalsqft",
+    "heatingorsystemtypeid",
+    "latitude",
+    "longitude",
+    "lotsizesquarefeet",
+    "poolsizesum",
+    "propertycountylandusecode",
+    "propertylandusetypeid",
+    "propertyzoningdesc",
+    "rawcensustractandblock",
+    "regionidcity",
+    "regionidcounty",
+    "regionidzip",
+    "roomcnt",
+    "unitcnt",
+    "yearbuilt",
+    "structuretaxvaluedollarcnt",
+    "taxvaluedollarcnt",
+    "assessmentyear",
+    "landtaxvaluedollarcnt",
+    "taxamount",
+    "taxdelinquencyyear",
+    "censustractandblock",)
+
+
+
+
     import sqlContext.implicits._
-    cols = cols.filter(str => !str.equals(col))
-    var data = df.na.drop(cols)
-    data = df.na.drop(Array(col))
-    data.columns.filter(!cols.contains(_)).foreach(data.drop(_))
 
 
     val labelIndexer = new StringIndexer()
-      .setInputCol(col)
-      .setOutputCol("indexedLabel")
-      .fit(data)
+        .setInputCol(col)
+        .setOutputCol("indexedLabel")
+        .fit(dfNotNull)
     // Automatically identify categorical features, and index them.
     val featureIndexer = new VectorIndexer()
-      .setInputCols(cols)
-      .setOutputCol("indexedFeatures")
-      .fit(data)
+        .setInputCol(col)
+        .setOutputCol("indexedFeatures")
+        .fit(dfNotNull)
 
     // Split the data into training and test sets (30% held out for testing).
-    val trainingData = data
+    val trainingData = dfNotNull
 
     // Train a DecisionTree model.
     val dt = new DecisionTreeClassifier()
-      .setLabelCol("indexedLabel")
-      .setFeaturesCol("indexedFeatures")
+        .setLabelCol("indexedLabel")
+        .setFeaturesCol("indexedFeatures")
 
     // Convert indexed labels back to original labels.
     val labelConverter = new IndexToString()
-      .setInputCol("prediction")
-      .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+        .setInputCol("prediction")
+        .setOutputCol("predictedLabel")
+        .setLabels(labelIndexer.labels)
 
     // Chain indexers and tree in a Pipeline.
     val pipeline = new Pipeline()
-      .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
+        .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
 
     // Train model. This also runs the indexers.
     val model = pipeline.fit(trainingData)
 
     // Make predictions.
-    model.transform(data)
-
+    model.transform(data)*/
+    df
   }
 
   override def main(args: Array[String]): Unit = {
@@ -181,22 +207,22 @@ object HouseApp extends App {
     var props = loadData(path + fic, sqlContext)
     println(fic + " loaded")
 
+    props = props.sample(0.5)
+
     props = flagColumns(props)
 
     val size = props.count()
     println(size)
-
-    props = dropMissing(props,size,sqlContext)
-
-    props = fillNaWeightedDistribution(props,sqlContext)
-
-
-
-    props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
+    //
+    props = dropMissing(props, size, sqlContext)
+    //
+    //    props = fillNaWeightedDistribution(props,sqlContext)
 
 
+        props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
+    //
 
-    props.describe().show()
+//    props.describe().show()
 
   }
 }
