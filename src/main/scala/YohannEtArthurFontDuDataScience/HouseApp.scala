@@ -1,16 +1,14 @@
 package YohannEtArthurFontDuDataScience
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.ml.feature._
+import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.sql
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{LongType, Metadata, StructField, StructType}
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.classification.DecisionTreeClassifier
-import org.apache.spark.ml.feature.{IndexToString, StringIndexer, VectorAssembler, VectorIndexer}
-
-import scala.collection.mutable
 
 object HouseApp extends App {
 
@@ -52,9 +50,9 @@ object HouseApp extends App {
   }
 
   def dropMissing(df: DataFrame, size: Long, sqlContext: SQLContext): sql.DataFrame = {
-    import sqlContext.implicits._
 
-    val list = df.columns.map(name => (name, df.select(name).filter(col(name).isNull).count()/size.toDouble)).toList.sortWith(_._2 >_._2)
+    val list = df.columns.map(name => (name, df.select(name).filter(col(name).isNull).count() / size.toDouble)).toList
+               .sortWith(_._2 > _._2)
 
     var tmp = List[String]()
     for (i <- df.columns.indices) {
@@ -97,93 +95,83 @@ object HouseApp extends App {
     dfU
   }
 
+//  def fillMean(df:DataFrame, names: String*): sql.DataFrame ={
+//
+//    var dfR = df
+//    for (name <- names) {
+//      var nb=0
+//      var sum:Double = 0
+//      dfR.select(name).foreach(r => {
+//        if(!r.anyNull){
+//          nb +=1
+//          sum += if(r.get.getDouble(0)
+//        }
+//      })
+//      dfR = dfR.na.fill(sum/nb,Array(name))
+//    }
+//    dfR
+//  }
+
   def decisionTreeFiller(df: DataFrame, sqlContext: SQLContext, colu: String): sql.DataFrame = {
-    import sqlContext.implicits._
 
-    df.describe().show()
+    var discreetCol = Array("buildingqualitytypeid", "heatingorsystemtypeid", "propertylandusetypeid",
+      "regionidcity", "regionidzip", "regionidcounty")
 
-    val dfNull = df.filter(col(colu).isNull).toDF()
-    val dfNotNull = df.filter(!col(colu).isNull).toDF()
+    val iDontKnowWhattoDo = Array("fips", "rawcensustractandblock", "censustractandblock", "propertycountylandusecode",
+      "propertyzoningdesc")
 
-/*
+    val dfNull = df.drop(iDontKnowWhattoDo:_*).filter(col(colu).isNull).toDF()
+    var dfNotNull = df.drop(iDontKnowWhattoDo:_*).filter(!col(colu).isNull).toDF()
 
+    discreetCol = discreetCol.filter(!_.equals(colu))
 
+    dfNotNull = dfNotNull.na.fill(404,discreetCol)
 
+    dfNotNull.columns.foreach(println(_))
 
+    val whatShouldBeLeft = Array("bathroomcnt", "bedroomcnt", "calculatedbathnbr", "calculatedfinishedsquarefeet",
+      "finishedsquarefeet12", "fireplacecnt", "fullbathcnt", "garagetotalsqft", "latitude", "longitude",
+      "lotsizesquarefeet", "poolsizesum", "roomcnt", "unitcnt", "yearbuilt", "structuretaxvaluedollarcnt",
+      "taxvaluedollarcnt", "assessmentyear", "landtaxvaluedollarcnt", "taxamount", "taxdelinquencyyear")
 
-    ("parcelid",
-    "bathroomcnt",
-    "bedroomcnt",
-    "buildingqualitytypeid",
-    "calculatedbathnbr",
-    "calculatedfinishedsquarefeet",
-    "finishedsquarefeet12",
-    "fips",
-    "fireplacecnt",
-    "fullbathcnt",
-    "garagetotalsqft",
-    "heatingorsystemtypeid",
-    "latitude",
-    "longitude",
-    "lotsizesquarefeet",
-    "poolsizesum",
-    "propertycountylandusecode",
-    "propertylandusetypeid",
-    "propertyzoningdesc",
-    "rawcensustractandblock",
-    "regionidcity",
-    "regionidcounty",
-    "regionidzip",
-    "roomcnt",
-    "unitcnt",
-    "yearbuilt",
-    "structuretaxvaluedollarcnt",
-    "taxvaluedollarcnt",
-    "assessmentyear",
-    "landtaxvaluedollarcnt",
-    "taxamount",
-    "taxdelinquencyyear",
-    "censustractandblock",)
-
-
-
-
-    import sqlContext.implicits._
 
 
     val labelIndexer = new StringIndexer()
-        .setInputCol(col)
-        .setOutputCol("indexedLabel")
-        .fit(dfNotNull)
-    // Automatically identify categorical features, and index them.
-    val featureIndexer = new VectorIndexer()
-        .setInputCol(col)
-        .setOutputCol("indexedFeatures")
-        .fit(dfNotNull)
+                .setInputCol(colu)
+                .setOutputCol("indexedLabel")
+                .fit(dfNotNull)
 
-    // Split the data into training and test sets (30% held out for testing).
-    val trainingData = dfNotNull
+//    val labelEstimator = new OneHotEncoderEstimator().setInputCols(Array(colu)).setOutputCols(Array(colu+"labeled")).fit(dfNotNull)
+    //val imputer = new Imputer().setInputCols(whatShouldBeLeft).setOutputCols(whatShouldBeLeft.map(_+"imput")).fit(dfNotNull)
+    val oneHotEncoder = new OneHotEncoderEstimator().setInputCols(discreetCol).setOutputCols(discreetCol.map(_+"vect")).fit(dfNotNull)
 
-    // Train a DecisionTree model.
-    val dt = new DecisionTreeClassifier()
-        .setLabelCol("indexedLabel")
-        .setFeaturesCol("indexedFeatures")
+    val VectorAssembler = new VectorAssembler().setInputCols(discreetCol.map(_+"vect") ++ whatShouldBeLeft).setOutputCol("features")
 
-    // Convert indexed labels back to original labels.
+    dfNotNull = dfNotNull.na.fill(dfNotNull.columns.filter(whatShouldBeLeft.contains(_)).zip(
+      dfNotNull.select(dfNotNull.columns.filter(whatShouldBeLeft.contains(_)).map(mean(_)): _*).first.toSeq
+    ).toMap)
+
     val labelConverter = new IndexToString()
         .setInputCol("prediction")
         .setOutputCol("predictedLabel")
         .setLabels(labelIndexer.labels)
 
-    // Chain indexers and tree in a Pipeline.
-    val pipeline = new Pipeline()
-        .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
 
-    // Train model. This also runs the indexers.
-    val model = pipeline.fit(trainingData)
+    // Train a DecisionTree model.
+    val dt = new DecisionTreeClassifier()
+                .setLabelCol("indexedLabel")
+                .setFeaturesCol("features")
 
-    // Make predictions.
-    model.transform(data)*/
+    val pipeline = new Pipeline().setStages(Array(labelIndexer,oneHotEncoder,VectorAssembler,dt,labelConverter))
+
+    val model = pipeline.fit(dfNotNull)
+
+    val predictions = model.transform(dfNull)
+
+
+    predictions.show()
+
+
     df
   }
 
@@ -197,17 +185,15 @@ object HouseApp extends App {
     val nbCore = Runtime.getRuntime().availableProcessors()
     println(s"nbCore = ${nbCore}")
     val sSession = SparkSession.builder().appName("YohannEtArthurFontDuDataScience")
-                   .master(s"local[$nbCore]").getOrCreate()
+                   .master(s"local[2]").getOrCreate()
     val sqlContext = sSession.sqlContext
-
-    import sqlContext.implicits._
 
     val fic = "properties_2017.csv"
     println("loading " + fic)
     var props = loadData(path + fic, sqlContext)
     println(fic + " loaded")
 
-    props = props.sample(0.5)
+    props = props.sample(0.01)
 
     props = flagColumns(props)
 
@@ -219,10 +205,15 @@ object HouseApp extends App {
     //    props = fillNaWeightedDistribution(props,sqlContext)
 
 
-        props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
+    props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
     //
 
-//    props.describe().show()
+    props
+    .coalesce(1)
+    .write.format("com.databricks.spark.csv")
+    .option("header", "true")
+    .save("mydata.csv")
+    //    props.describe().show()
 
   }
 }
