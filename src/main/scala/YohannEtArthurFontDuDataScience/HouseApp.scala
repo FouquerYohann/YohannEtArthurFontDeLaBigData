@@ -6,10 +6,13 @@ import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, Deci
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.sql
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import shapeless.Nat._0
 
 object HouseApp extends App {
 
@@ -48,6 +51,33 @@ object HouseApp extends App {
       .option("header", "true")
       .option("inferSchema", "true")
       .csv(path)
+  }
+
+  def dropPlusVite(df: DataFrame): sql.DataFrame = {
+    df.drop(Array("buildingclasstypeid",
+      "finishedsquarefeet13",
+      "basementsqft",
+      "storytypeid",
+      "yardbuildingsqft26",
+      "architecturalstyletypeid",
+      "typeconstructiontypeid",
+      "finishedsquarefeet6",
+      "pooltypeid10",
+      "decktypeid",
+      "pooltypeid2",
+      "hashottuborspa",
+      "yardbuildingsqft17",
+      "taxdelinquencyflag",
+      "finishedsquarefeet15",
+      "finishedfloor1squarefeet",
+      "finishedsquarefeet50",
+      "threequarterbathnbr",
+      "pooltypeid7",
+      "poolcnt",
+      "numberofstories",
+      "airconditioningtypeid",
+      "garagecarcnt",
+      "regionidneighborhood"): _*)
   }
 
   def dropMissing(df: DataFrame, size: Long, sqlContext: SQLContext): sql.DataFrame = {
@@ -175,27 +205,34 @@ object HouseApp extends App {
     df
   }
 
-  def linearRegression(df: DataFrame, sqlContext: SQLContext) : PipelineModel = {
+  def linearRegression(df: DataFrame, sqlContext: SQLContext): PipelineModel = {
 
-    val numeriCols = Array("bathroomcnt",
+    val numeriCols = Array(
+      "assessmentyear",
+      "bathroomcnt",
       "bedroomcnt",
       "calculatedbathnbr",
       "calculatedfinishedsquarefeet",
       "fireplacecnt",
+      "finishedsquarefeet12",
       "fullbathcnt",
       "garagecarcnt",
+      "garagetotalsqft",
+      "landtaxvaluedollarcnt",
       "latitude",
       "longitude",
       "lotsizesquarefeet",
       "numberofstories",
       "poolcnt",
+      "poolsizesum",
       "roomcnt",
-      "yearbuilt",
+      "structuretaxvaluedollarcnt",
+      "unitcnt",
       "taxamount",
-      "taxdelinquencyyear"
-
+      "taxdelinquencyyear",
+      "taxvaluedollarcnt",
+      "yearbuilt"
     ).filter(df.columns.contains(_))
-
 
     val assembler = new VectorAssembler()
       .setInputCols(numeriCols)
@@ -205,7 +242,10 @@ object HouseApp extends App {
     val pipeline = new Pipeline()
       .setStages(Array(assembler, lr))
 
-    pipeline.fit(df.na.fill(0))
+
+    pipeline.fit(df.na.fill(df.columns.filter(numeriCols.contains(_)).zip(
+      df.select(df.columns.filter(numeriCols.contains(_)).map(mean(_)): _*).first.toSeq
+    ).toMap))
   }
 
   override def main(args: Array[String]): Unit = {
@@ -221,45 +261,80 @@ object HouseApp extends App {
       .master(s"local[${nbCore}]").getOrCreate()
     val sqlContext = sSession.sqlContext
 
-    val fic = "properties_2017.csv"
+    val fic = "properties_2016.csv"
     println("loading " + fic)
     var props = loadData(path + fic, sqlContext)
     println(fic + " loaded")
 
-    val predFile = "train_2017.csv"
+    val predFile = "train_2016.csv"
     println("loading " + predFile)
     var pred = loadData(path + predFile, sqlContext)
     println(predFile + " loaded")
 
     props = props.join(pred, "parcelid")
     props.show()
-//    props = props.sample(0.01)
+
+    val fic17 = "properties_2017.csv"
+    println("loading " + fic17)
+    var props17 = loadData(path + fic17, sqlContext)
+    println(fic17 + " loaded")
+
+    val predFile17 = "train_2017.csv"
+    println("loading " + predFile17)
+    var pred17 = loadData(path + predFile17, sqlContext)
+    println(predFile17 + " loaded")
+
+    props17 = props17.join(pred17, "parcelid")
+
+    props17 = flagColumns(props17)
+    props17 = dropPlusVite(props17)
 
     props = flagColumns(props)
 
     val size = props.count()
     println(size)
 
-    props = dropMissing(props, size, sqlContext)
+    //    props = dropMissing(props, size, sqlContext)
 
-//    props = fillNaWeightedDistribution(props, sqlContext)
+    props = dropPlusVite(props)
+    //    props = fillNaWeightedDistribution(props, sqlContext)
 
     //    props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
 
     val modelLR = linearRegression(props, sqlContext)
 
+    props17 = modelLR.transform(props17.na.drop())
     props = modelLR.transform(props.na.drop())
 
     val columnsToSum = List(col("logerror"), col("prediction"))
 
-    props = props.withColumn("difError", columnsToSum.reduce(_ - _))
-//    props.show()
-    props
-      .coalesce(1)
-      .write.format("com.databricks.spark.csv")
-      .option("header", "true")
-      .save("mydata.csv")
-        props.describe().show()
+    props = props.withColumn("difErr", columnsToSum.reduce(_ - _))
+
+    props = props.withColumn("difError", props.col("difErr").cast(DoubleType))
+      .drop("difErr")
+
+
+    val predictionAndObservations = props17
+      .select("prediction", Array("logerror"): _*)
+      .rdd
+      .map(row => (row.getDouble(0), row.getDouble(1)))
+    val metrics = new RegressionMetrics(predictionAndObservations)
+    val rmse = metrics.rootMeanSquaredError
+    println("RMSE: " + rmse)
+    val err = props.col("difError")
+      .cast(DoubleType)
+
+    //      .map(row => Math.pow(row.getDouble(0), 2))
+    //      .reduce(_ + _) /
+    //      props.select("difError").count()
+    println(err)
+    //    props.show()
+    //    props
+    //      .coalesce(1)
+    //      .write.format("com.databricks.spark.csv")
+    //      .option("header", "true")
+    //      .save("mydata.csv")
+    props.select("logerror","diferror").describe().show()
 
   }
 }
