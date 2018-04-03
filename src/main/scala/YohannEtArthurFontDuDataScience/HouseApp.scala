@@ -1,7 +1,7 @@
 package YohannEtArthurFontDuDataScience
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature._
@@ -175,7 +175,7 @@ object HouseApp extends App {
     df
   }
 
-  def linearRegression(df: DataFrame, sqlContext: SQLContext): DataFrame = {
+  def linearRegression(df: DataFrame, sqlContext: SQLContext) : PipelineModel = {
 
     val numeriCols = Array("bathroomcnt",
       "bedroomcnt",
@@ -205,13 +205,7 @@ object HouseApp extends App {
     val pipeline = new Pipeline()
       .setStages(Array(assembler, lr))
 
-    val Array(trainSet, testSet) = df.na.fill(0).randomSplit(Array(0.9, 0.1))
-    // Entrainement du modèle sur trainSet
-    val modelLR = pipeline.fit(trainSet)
-    // Prédiction sur testSet
-    val predictions = modelLR.transform(testSet)
-    predictions.select("logerror", "prediction").show()
-    df
+    pipeline.fit(df.na.fill(0))
   }
 
   override def main(args: Array[String]): Unit = {
@@ -252,14 +246,20 @@ object HouseApp extends App {
 
     //    props = decisionTreeFiller(props, sqlContext, "buildingqualitytypeid")
 
-    props = linearRegression(props, sqlContext)
+    val modelLR = linearRegression(props, sqlContext)
 
+    props = modelLR.transform(props.na.drop())
+
+    val columnsToSum = List(col("logerror"), col("prediction"))
+
+    props = props.withColumn("difError", columnsToSum.reduce(_ - _))
+//    props.show()
     props
       .coalesce(1)
       .write.format("com.databricks.spark.csv")
       .option("header", "true")
       .save("mydata.csv")
-    //    props.describe().show()
+        props.describe().show()
 
   }
 }
