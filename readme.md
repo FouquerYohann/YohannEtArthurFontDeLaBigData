@@ -19,8 +19,32 @@ val metrics = new RegressionMetrics(predictionAndObservations)
 val rmse = metrics.rootMeanSquaredError
  ```
  ##### - Remplissage des valeurs naîves
- Remplissage des colonnes associées à un "flag" et des valeurs absentes par 0.
-
+ <p>Remplissage des colonnes associées à un "flag" et des valeurs absentes par 0.</p>
+ <p>Résultat de l'apprentissage par régression linéaire avec les colonnes :
+     "assessmentyear",
+      "bathroomcnt",
+      "bedroomcnt",
+      "calculatedbathnbr",
+      "calculatedfinishedsquarefeet",
+      "fireplacecnt",
+      "finishedsquarefeet12",
+      "fullbathcnt",
+      "garagecarcnt",
+      "garagetotalsqft",
+      "landtaxvaluedollarcnt",
+      "latitude",
+      "longitude",
+      "lotsizesquarefeet",
+      "numberofstories",
+      "poolcnt",
+      "poolsizesum",
+      "roomcnt",
+      "structuretaxvaluedollarcnt",
+      "unitcnt",
+      "taxamount",
+      "taxdelinquencyyear",
+      "taxvaluedollarcnt",
+      "yearbuilt"</p>
   <p>Train_2016: 0.1583605719585012</p> 
   <p>Train_2017: 0.15472756334029183</p> 
  
