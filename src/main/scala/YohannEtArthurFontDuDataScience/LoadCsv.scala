@@ -1,5 +1,7 @@
 package YohannEtArthurFontDuDataScience
 
+import java.util.Date
+
 import YohannEtArthurFontDuDataScience.HouseApp.loadData
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.ml.feature.VectorAssembler
@@ -8,9 +10,6 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.sql.functions.mean
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
-
-
-
 
 
 object LoadCsv extends App {
@@ -58,6 +57,8 @@ object LoadCsv extends App {
   }
 
   override def main(args: Array[String]): Unit = {
+
+    args.foreach(str => println(str))
     val path: String = "data/"
 
     Logger.getLogger("org").setLevel(Level.OFF)
@@ -69,22 +70,32 @@ object LoadCsv extends App {
       .master(s"local[${nbCore}]").getOrCreate()
     val sqlContext = sSession.sqlContext
 
-    val fic = "NumericFilledWithMeanAndStatisticDistribution2017.csv"
+    val fic = args(0)
     println("loading " + fic)
-    var props = loadData(path + fic, sqlContext)
+    var props = loadData(fic, sqlContext)
     println(fic + " loaded")
 
-    val modelLR = linearRegression(props, sqlContext)
+    val ficTest = args(1)
+    println("loading " + ficTest)
+    var propsTest = loadData(ficTest, sqlContext)
+    println(ficTest + " loaded")
+    var trainSet = props
+    var testSet = propsTest
 
-    props = modelLR.transform(props.na.drop())
+    val modelLR = linearRegression(trainSet, sqlContext)
 
-    val predictionAndObservations = props
+    testSet = modelLR.transform(testSet)
+
+    val predictionAndObservations = testSet
       .select("prediction", Array("logerror"): _*)
       .rdd
       .map(row => (row.getDouble(0), row.getDouble(1)))
     val metrics = new RegressionMetrics(predictionAndObservations)
-    val rmse = metrics.rootMeanSquaredError
-    println("RMSE: " + rmse)
+    println("rootMeanSquaredError: " + metrics.rootMeanSquaredError)
+    println("meanAbsoluteError: " + metrics.meanAbsoluteError)
+    println("explainedVariance: " + metrics.explainedVariance)
+    println("meanSquaredError: " + metrics.meanSquaredError)
+    println("r2: " + metrics.r2)
 
   }
 }

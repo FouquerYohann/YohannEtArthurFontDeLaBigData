@@ -3,14 +3,10 @@ package YohannEtArthurFontDuDataScience
 import YohannEtArthurFontDuDataScience.HouseApp.loadData
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.classification.DecisionTreeClassifier
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.feature._
-import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql
-import org.apache.spark.sql.functions.{col, mean}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 
 
@@ -29,7 +25,7 @@ object Etape2 extends App{
 
     dfNotNull = dfNotNull.na.fill(404, discreetCol)
 
-    dfNotNull.columns.foreach(println(_))
+//    dfNotNull.columns.foreach(println(_))
 
     val whatShouldBeLeft = Array("bathroomcnt", "bedroomcnt", "calculatedbathnbr", "calculatedfinishedsquarefeet",
       "finishedsquarefeet12", "fireplacecnt", "fullbathcnt", "garagetotalsqft", "latitude", "longitude",
@@ -56,16 +52,21 @@ object Etape2 extends App{
 
     // Train a DecisionTree model.
     val dt = new DecisionTreeClassifier()
+        .setMaxBins(10)
+        .setMaxDepth(5)
         .setLabelCol("indexedLabel")
         .setFeaturesCol("features")
 
-    val pipeline = new Pipeline().setStages(Array(labelIndexer, oneHotEncoder, VectorAssembler, dt, labelConverter))
+    val pipeline = new Pipeline().setStages(Array(labelIndexer, oneHotEncoder, VectorAssembler,dt))
+    println("begining training")
+    val model = pipeline.fit(dfNotNull).transform(dfNotNull)
+    println("end training")
 
-    val model = pipeline.fit(dfNotNull)
 
-    val predictions = model.transform(dfNull)
-
-    predictions.show()
+//    println("begining predictions training")
+//    val predictions = model.transform(dfNull)
+//    println("showing predictions")
+//    predictions.show()
 
     df
   }
@@ -81,15 +82,16 @@ object Etape2 extends App{
 
     val nbCore = Runtime.getRuntime().availableProcessors()
     println(s"nbCore = ${nbCore}")
-    val sSession = SparkSession.builder().appName("YohannEtArthurFontDuDataScience")
+    val sSession = SparkSession.builder().config("maxToStringFields",30).appName("YohannEtArthurFontDuDataScience")
                    .master(s"local[$nbCore]").getOrCreate()
     val sqlContext = sSession.sqlContext
 
-    val fic = "data/NumericFilledWithMean2017.csv"
+    val fic = args(0)
     println("loading " + fic)
-    var props = loadData(path + fic, sqlContext)
+    var props = loadData(fic, sqlContext)
     println(fic + " loaded")
 
+    props = props.sample(0.01)
 
     props = decisionTreeFiller(props,sqlContext,"buildingqualitytypeid")
   }

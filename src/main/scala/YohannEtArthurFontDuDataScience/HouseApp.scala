@@ -105,7 +105,7 @@ object HouseApp extends App {
       println(s"name = ${name}")
       println(s"l = ${l}")
 
-      dfU.groupBy(name).count().show()
+//      dfU.groupBy(name).count().show()
       val repartition = dfU.groupBy(name).count().filter(!_.anyNull).map(r => (r.getInt(0), r.getLong(1) / l.toDouble))
         .collect().sortWith(_._2 < _._2)
 
@@ -120,7 +120,7 @@ object HouseApp extends App {
 
       dfU = dfU.drop(name).join(frame, "UniqueID").drop("UniqueID")
 
-      frame.describe().show()
+//      frame.describe().show()
 
     })
     dfU

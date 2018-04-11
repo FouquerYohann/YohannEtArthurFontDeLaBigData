@@ -59,3 +59,9 @@ val rmse = metrics.rootMeanSquaredError
  Nous avons eu plusieurs idées de feature engineering :
  - distance avec le centre commerciale le plus proche (utilisant des données de open street map)
  - distance avec la plage
+ 
+ ###Submit
+ lance l'apprentissage de regression linéaire sur un dataset prèmodifié
+ ```shell
+spark-submit --class YohannEtArthurFontDuDataScience.LoadCsv --master local com.projet.spark-1.0-SNAPSHOT.jar [trainingDataSet].csv [testDataSet].csv
+```
