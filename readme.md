@@ -4,7 +4,11 @@
 Veuillez trouver ci-joint notre code ainsi que un JAR : com.projet.spark-1.0-SNAPSHOT.jar
 
 
+<<<<<<< 1bd71f92376bbd4852d6f76e03c07fdf022d71f2
 Il est possible de trouver sur kaggle: https://www.kaggle.com/c/zillow-prize-1/data
+=======
+Il est possible de trouver sur <a href='https://www.kaggle.com/c/zillow-prize-1/data'>kaggle </a>
+>>>>>>> readme
 4 fichiers contenant les données:
 - deux fichiers par années un fichier properties_[année].csv contenant les caractéristiques des maisons et un fichier train_[année].csv contenant la prévision ( ces deux fichier peuvent être join par la colonne parcelid)
 
