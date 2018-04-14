@@ -1,67 +1,23 @@
-#Rapport projet DAR
-##Spark SQL et Spark ML
+# Projet DAR: Spark
+## Spark SQL et Spark ML
 
-###Imputing des features manquante
-  Les colonnes comportant des flags manquant sont en fait signe qu'il est faux. Remplacement des flags manquant par la valeur `false` dans les colonnes "fireplaceflag", "taxdelinquencyflag".
-   
-  De meme dans les colonnes "fireplacecnt", "poolsizesum", "taxdelinquencyyear", "garagetotalsqft", vu le nombre de valeurs manquante il s'agit en fait que manquante signifie qu'il n'y en pas et donc nous les avons remplis par `0`
-  par contre la colonne "unitcnt" sera remplis de `1` car celle ci correspond au nombre de  ???
-  
-    
-    
-###Comparaison des résultats RMSE après différentes modifications sur les données : 
- ```scala
-val predictionAndObservations = props
-  .select("prediction", Array("logerror"): _*)
-  .rdd
-  .map(row => (row.getDouble(0), row.getDouble(1)))
-val metrics = new RegressionMetrics(predictionAndObservations)
-val rmse = metrics.rootMeanSquaredError
- ```
- ##### - Remplissage des valeurs naîves
- <p>Remplissage des colonnes associées à un "flag" et des valeurs absentes par 0.</p>
- <p>Résultat de l'apprentissage par régression linéaire avec les colonnes :
-     "assessmentyear",
-      "bathroomcnt",
-      "bedroomcnt",
-      "calculatedbathnbr",
-      "calculatedfinishedsquarefeet",
-      "fireplacecnt",
-      "finishedsquarefeet12",
-      "fullbathcnt",
-      "garagecarcnt",
-      "garagetotalsqft",
-      "landtaxvaluedollarcnt",
-      "latitude",
-      "longitude",
-      "lotsizesquarefeet",
-      "numberofstories",
-      "poolcnt",
-      "poolsizesum",
-      "roomcnt",
-      "structuretaxvaluedollarcnt",
-      "unitcnt",
-      "taxamount",
-      "taxdelinquencyyear",
-      "taxvaluedollarcnt",
-      "yearbuilt"</p>
-  <p>Train_2016: 0.1583605719585012</p> 
-  <p>Train_2017: 0.15472756334029183</p> 
- 
- ##### - Remplissage des espaces vide par la médiane/moyenne de leur colonne
- Avec répartition statistique aléatoire des colonnes catégoriques :
-  <p>Train_2016: 0.1583605719585012</p> 
-  <p>Train_2017: 0.15472756334029183</p> 
-  
- ##### - Remplissage des espaces vide grâce a un arbre de décision entrainé sur les autres colonnes
- ##### - Ajout de nouvelles colonnes de feature engineering
- Pour augmenter la précision du modèle il est également possible d'ajouter de nouvelles colonnes en utilisant les informations déja présentes.
- Nous avons eu plusieurs idées de feature engineering :
- - distance avec le centre commerciale le plus proche (utilisant des données de open street map)
- - distance avec la plage
- 
- ###Submit
- lance l'apprentissage de regression linéaire sur un dataset prèmodifié
- ```shell
+Veuillez trouver ci-joint notre code ainsi que un JAR : com.projet.spark-1.0-SNAPSHOT.jar
+
+
+Il est possible de trouver sur kaggle: https://www.kaggle.com/c/zillow-prize-1/data
+4 fichiers contenant les données:
+- deux fichiers par années un fichier properties_[année].csv contenant les caractéristiques des maisons et un fichier train_[année].csv contenant la prévision ( ces deux fichier peuvent être join par la colonne parcelid)
+
+
+Une cible du JAR permet de générer les fichiers traités prêt pour le machine learning ils générent les fichiers déjà présent dans le repo : NumericFilledWithMeanAndStatisticDistribution2016.csv et NumericFilledWithMeanAndStatisticDistribution2017.csv
+Et lance la régression linéaire sur ces deux fichiers
+(Attention!!! Lancé sur la données complète ce main nécessite une config de spark augmenté et au moins 10go de mémoire alloué )
+```bash
+spark-submit --driver-memory 10G --executor-memory 15G --class YohannEtArthurFontDuDataScience.JustOne --master local /your/path/target/com.projet.spark-1.0-SNAPSHOT.jar /your/path/data/properties_2017.csv /your/path/data/train_2017.csv /your/path/data/properties_2016.csv /your/path/data/train_2016.csv
+```
+
+Une deuxième cible du main permet de lancer la regression linéaire directement sur des données déjà traité (comme les fichiers NumericFilledWithMeanAndStatisticDistribution201[6-7].csv)
+
+```bash
 spark-submit --class YohannEtArthurFontDuDataScience.LoadCsv --master local com.projet.spark-1.0-SNAPSHOT.jar [trainingDataSet].csv [testDataSet].csv
 ```
